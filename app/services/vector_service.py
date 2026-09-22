@@ -10,6 +10,8 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+from app.config import get_settings
+
 
 COLLECTION_NAME = "knowledge_base"
 VECTOR_SIZE = 384
@@ -17,10 +19,28 @@ VECTOR_SIZE = 384
 
 class VectorService:
     def __init__(self):
-        # Local persistent Qdrant database
-        self.client = QdrantClient(
-            path="./qdrant_storage"
-        )
+        self._client: QdrantClient | None = None
+
+    @property
+    def client(self) -> QdrantClient:
+        if self._client is not None:
+            return self._client
+
+        settings = get_settings()
+        if settings.qdrant_mode == "local":
+            settings.qdrant_path.mkdir(parents=True, exist_ok=True)
+            self._client = QdrantClient(path=str(settings.qdrant_path))
+        else:
+            if not settings.qdrant_url:
+                raise RuntimeError("QDRANT_URL is required when QDRANT_MODE is url or cloud.")
+            if settings.qdrant_mode == "cloud" and not settings.qdrant_api_key:
+                raise RuntimeError("QDRANT_API_KEY is required when QDRANT_MODE is cloud.")
+            self._client = QdrantClient(
+                url=settings.qdrant_url,
+                api_key=settings.qdrant_api_key,
+                timeout=settings.qdrant_timeout_seconds,
+            )
+        return self._client
 
     def create_collection(self):
         exists = self.client.collection_exists(
@@ -45,6 +65,11 @@ class VectorService:
             "status": "already_exists",
             "collection": COLLECTION_NAME,
         }
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.close()
+            self._client = None
 
     def health(self):
         collections = self.client.get_collections()

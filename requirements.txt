@@ -1,9 +1,9 @@
 fastapi
 uvicorn[standard]
+gunicorn
 python-multipart
-pydantic-settings 
-qdrant-client
-qdrant-client==1.19.1 
+pydantic-settings
+qdrant-client==1.19.1
 sentence-transformers
 pymupdf
 transformers

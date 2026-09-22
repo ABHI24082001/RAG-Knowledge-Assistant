@@ -1,0 +1,20 @@
+[Unit]
+Description=RAG Knowledge Assistant FastAPI service
+After=network.target
+
+[Service]
+Type=exec
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/rag-knowledge-assistant
+EnvironmentFile=/opt/rag-knowledge-assistant/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/rag-knowledge-assistant/deploy/start-production.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=300
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

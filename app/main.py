@@ -1,10 +1,16 @@
 import os
+import logging
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
-os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
-os.environ.setdefault("RAG_LLM_DEVICE", "cpu")
+from app.config import get_settings
+
+settings = get_settings()
+os.environ.setdefault("HF_HUB_DISABLE_XET", settings.hf_hub_disable_xet)
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.services.embedding_service import embedding_service
 from app.models.schemas import ChatRequest, SearchRequest, TextCreateRequest
@@ -13,11 +19,43 @@ from app.services.pdf_service import pdf_service
 from app.services.rag_service import rag_service
 from app.services.vector_service import VECTOR_SIZE, vector_service
 
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    try:
+        collection = vector_service.create_collection()
+        logger.info("Qdrant startup check completed: %s", collection["status"])
+    except Exception as exc:
+        logger.exception("Qdrant startup check failed")
+        raise RuntimeError(f"Application startup failed: unable to initialize Qdrant: {exc}") from exc
+    try:
+        yield
+    finally:
+        vector_service.close()
+        logger.info("RAG API shutdown completed")
+
+
 app = FastAPI(
     title="RAG Knowledge Assistant",
     description="RAG API using FastAPI, Hugging Face and Qdrant",
     version="1.0.0",
+    lifespan=lifespan,
 )
+
+if settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/")
