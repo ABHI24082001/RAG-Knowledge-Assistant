@@ -3,6 +3,7 @@ import { api } from './services/api'
 import { buildChatPayload, NO_ANSWER } from './utils/chat'
 import './App.css'
 import './integrations.css'
+import './delete-document.css'
 
 const Icons = ({ name, size = 20 }) => {
   const shapes = {
@@ -22,6 +23,31 @@ function SourceList({ sources }) {
   return <div className="sources"><button className="sources-toggle" onClick={() => setOpen(!open)}>Sources ({sources.length}) <span className={open ? 'rotated' : ''}><Icons name="chevron" size={16}/></span></button>{open && <div className="source-grid">{sources.map((source, index) => <div className="source-card" key={`${source.file_name}-${source.chunk_id}-${index}`}><div className="source-file"><Icons name="file" size={15}/>{source.file_name}</div><div className="source-meta"><span>Page {source.page}</span><span>Chunk {source.chunk_id}</span><span>{Math.round(source.score * 100)}% relevant</span></div></div>)}</div>}</div>
 }
 
+function DocumentCard({ document, selected, deleting, onSelect, onDelete }) {
+  return <div className={`document-card ${selected ? 'selected' : ''}`}>
+    <button type="button" className="document-select" onClick={onSelect}>
+      <div className="document-icon"><Icons name="file" size={19}/></div>
+      <div className="document-info">
+        <strong title={document.file_name}>{document.file_name}</strong>
+        <span>{document.page_count} {document.page_count === 1 ? 'page' : 'pages'} <i>•</i> {document.chunk_count} chunks</span>
+      </div>
+    </button>
+    <button
+      type="button"
+      className="delete-button"
+      aria-label="Delete document"
+      title="Delete document"
+      disabled={deleting}
+      onClick={(event) => {
+        event.stopPropagation()
+        onDelete()
+      }}
+    >
+      {deleting ? <i className="spinner small"/> : <Icons name="trash" size={17}/>} 
+    </button>
+  </div>
+}
+
 function App() {
   const [documents, setDocuments] = useState([])
   const [selectedId, setSelectedId] = useState('')
@@ -30,6 +56,7 @@ function App() {
   const [uploading, setUploading] = useState(false)
   const [loadingDocs, setLoadingDocs] = useState(true)
   const [deletingId, setDeletingId] = useState('')
+  const [documentToDelete, setDocumentToDelete] = useState(null)
   const [connected, setConnected] = useState(false)
   const [qdrantStatus, setQdrantStatus] = useState('Checking connection...')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -110,16 +137,27 @@ function App() {
     } catch (error) { toast(error.message || `${label} failed.`, 'error') } finally { setInspecting('') }
   }
 
-  const removeDocument = async (event, doc) => {
-    event.stopPropagation()
-    if (!window.confirm(`Delete “${doc.file_name}” and all of its indexed chunks?`)) return
+  const removeDocument = async () => {
+    const doc = documentToDelete
+    if (!doc || deletingId) return
     setDeletingId(doc.document_id)
     try {
       await api.deleteDocument(doc.document_id)
       setDocuments((items) => items.filter((item) => item.document_id !== doc.document_id))
-      if (selectedId === doc.document_id) setSelectedId('')
-      toast('Document deleted.')
-    } catch (error) { toast(error.message || 'Failed to delete document.', 'error') } finally { setDeletingId('') }
+      if (selectedId === doc.document_id) {
+        setSelectedId('')
+        setMessages([])
+      }
+      setDocumentToDelete(null)
+      toast('Document deleted successfully.')
+    } catch (error) {
+      console.error('Delete document failed', {
+        documentId: doc.document_id,
+        status: error.status || 0,
+        responseError: error.responseError || error.message,
+      })
+      toast('Could not delete the document. Please try again.', 'error')
+    } finally { setDeletingId('') }
   }
 
   const send = async () => {
@@ -169,7 +207,17 @@ function App() {
         <div className="file-actions"><button disabled={!file || inspecting} onClick={() => inspectPdf('extract', 'Text extraction')}>{inspecting === 'extract' ? 'Extracting...' : 'Extract text'}</button><button disabled={!file || inspecting} onClick={() => inspectPdf('preview', 'Chunk preview')}>{inspecting === 'preview' ? 'Preparing...' : 'Preview chunks'}</button></div>
         {inspection && <div className="inspection"><div><strong>{inspection.label}</strong><button onClick={() => setInspection(null)}><Icons name="close" size={13}/></button></div><span>{inspection.result.page_count} pages {inspection.result.chunk_count ? `• ${inspection.result.chunk_count} chunks` : `• ${inspection.result.total_characters} characters`}</span></div>}
         <button className="index-button" disabled={!file || uploading} onClick={upload}>{uploading ? <><i className="spinner"/> Indexing document...</> : <><Icons name="upload" size={17}/> Upload &amp; Index</>}</button>
-        <section className="document-section"><div className="section-label"><span>INDEXED DOCUMENTS</span><button onClick={loadDocuments} disabled={loadingDocs}>Refresh</button></div>{loadingDocs ? <div className="skeleton-list"><span/><span/><span/></div> : documents.length ? <div className="document-list">{documents.map((doc) => <button className={`document-card ${selectedId === doc.document_id ? 'selected' : ''}`} key={doc.document_id} onClick={() => { setSelectedId(doc.document_id); setSidebarOpen(false) }}><div className="document-icon"><Icons name="file" size={19}/></div><div className="document-info"><strong title={doc.file_name}>{doc.file_name}</strong><span>{doc.page_count} {doc.page_count === 1 ? 'page' : 'pages'} <i>•</i> {doc.chunk_count} chunks</span></div><span className="delete-button" role="button" tabIndex="0" onClick={(event) => removeDocument(event, doc)}>{deletingId === doc.document_id ? <i className="spinner small"/> : <Icons name="trash" size={17}/>}</span></button>)}</div> : <div className="empty-documents"><div><Icons name="database" size={26}/></div><strong>No documents indexed yet</strong><p>Upload a PDF to start building your knowledge base.</p></div>}</section>
+        <section className="document-section">
+          <div className="section-label"><span>INDEXED DOCUMENTS</span><button onClick={loadDocuments} disabled={loadingDocs}>Refresh</button></div>
+          {loadingDocs ? <div className="skeleton-list"><span/><span/><span/></div> : documents.length ? <div className="document-list">{documents.map((doc) => <DocumentCard
+            key={doc.document_id}
+            document={doc}
+            selected={selectedId === doc.document_id}
+            deleting={deletingId === doc.document_id}
+            onSelect={() => { setSelectedId(doc.document_id); setSidebarOpen(false) }}
+            onDelete={() => setDocumentToDelete(doc)}
+          />)}</div> : <div className="empty-documents"><div><Icons name="database" size={26}/></div><strong>No documents indexed yet</strong><p>Upload a PDF to start building your knowledge base.</p></div>}
+        </section>
         <div className="system-status"><span className={connected ? 'online-dot' : ''}/><div><strong>{connected ? 'Backend healthy' : 'Backend offline'}</strong><small>{qdrantStatus}</small></div></div>
       </aside><div className={`backdrop ${sidebarOpen ? 'show' : ''}`} onClick={() => setSidebarOpen(false)}/>
       <main className="chat-panel">
@@ -180,7 +228,29 @@ function App() {
         <div className="conversation">{messages.length === 0 ? <div className="welcome"><div className="welcome-icon"><Icons name="brain" size={29}/></div><h3>Ask anything about your documents</h3><p>Your answers are generated using retrieved context from your indexed PDFs.</p><div className="question-chips">{examples.map((example) => <button key={example} onClick={() => setQuestion(example)}>{example}</button>)}</div></div> : messages.map((message, index) => <div className={`message ${message.role}`} key={index}>{message.role === 'assistant' && <div className="avatar"><Icons name="brain" size={17}/></div>}<div className="message-content"><div className="bubble">{message.text}</div>{message.notFound && <div className="not-found-note"><Icons name="info" size={15}/> No sufficiently relevant context was found.</div>}{message.role === 'assistant' && <SourceList sources={message.sources}/>}</div></div>)}{chatting && <div className="message assistant"><div className="avatar"><Icons name="brain" size={17}/></div><div className="typing"><div>Searching knowledge base...</div><p><i/><i/><i/> Generating grounded response</p></div></div>}<div ref={chatEnd}/></div>
         <div className="chat-composer"><div className="composer"><textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send() } }} placeholder="Ask a question about your documents..." rows="1" disabled={chatting}/><button className="send-button" disabled={!question.trim() || chatting} onClick={send}><Icons name="send" size={18}/></button></div><div className="composer-hint"><span>Answers are grounded in your indexed knowledge base</span><kbd>Enter</kbd> to send <b>•</b> <kbd>Shift + Enter</kbd> for new line</div></div>
       </main>
-    </div><div className="toasts">{toasts.map((item) => <div className={`toast ${item.type}`} key={item.id}><span>{item.type === 'success' ? <Icons name="check" size={17}/> : <Icons name="info" size={17}/>}</span>{item.message}</div>)}</div>
+    </div>
+    {documentToDelete && <div
+      className="delete-dialog-backdrop"
+      onMouseDown={() => { if (!deletingId) setDocumentToDelete(null) }}
+    >
+      <div
+        className="delete-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="delete-dialog-icon"><Icons name="trash" size={21}/></div>
+        <h3 id="delete-dialog-title">Delete this document?</h3>
+        <p id="delete-dialog-description">This will remove the document and its indexed chunks.</p>
+        <div className="delete-dialog-actions">
+          <button type="button" className="cancel-delete" disabled={Boolean(deletingId)} onClick={() => setDocumentToDelete(null)}>Cancel</button>
+          <button type="button" className="confirm-delete" disabled={Boolean(deletingId)} onClick={removeDocument}>{deletingId ? <><i className="spinner small"/> Deleting...</> : 'Delete'}</button>
+        </div>
+      </div>
+    </div>}
+    <div className="toasts">{toasts.map((item) => <div className={`toast ${item.type}`} key={item.id}><span>{item.type === 'success' ? <Icons name="check" size={17}/> : <Icons name="info" size={17}/>}</span>{item.message}</div>)}</div>
   </div>
 }
 
