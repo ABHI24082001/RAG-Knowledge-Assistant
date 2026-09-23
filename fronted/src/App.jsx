@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from './services/api'
+import { buildChatPayload, NO_ANSWER } from './utils/chat'
 import './App.css'
 import './integrations.css'
-
-const NO_ANSWER = 'I could not find that information in the indexed documents.'
 
 const Icons = ({ name, size = 20 }) => {
   const shapes = {
@@ -58,7 +57,13 @@ function App() {
     setLoadingDocs(true)
     try {
       const [data, health, qdrant] = await Promise.all([api.listDocuments(), api.health(), api.qdrantHealth()])
-      setDocuments(data.documents || [])
+      const nextDocuments = data.documents || []
+      setDocuments(nextDocuments)
+      setSelectedId((currentId) => (
+        currentId && !nextDocuments.some((doc) => doc.document_id === currentId)
+          ? ''
+          : currentId
+      ))
       setConnected(health.status === 'healthy')
       setQdrantStatus(qdrant.status === 'connected' ? 'Vector DB connected' : 'Vector DB unavailable')
     } catch (error) {
@@ -124,9 +129,21 @@ function App() {
     setQuestion('')
     setChatting(true)
     try {
-      const result = await api.chat({ question: text, top_k: 3, ...(selectedId ? { document_id: selectedId } : {}) })
-      setMessages((items) => [...items, { role: 'assistant', text: result.answer, sources: result.sources || [], notFound: result.answer === NO_ANSWER }])
-    } catch (error) { toast(error.message || 'Chat request failed.', 'error') } finally { setChatting(false) }
+      const payload = buildChatPayload(text, selectedId)
+      const response = await api.chat(payload)
+      setMessages((items) => [...items, {
+        role: 'assistant',
+        text: response.answer,
+        sources: response.sources,
+        notFound: response.answer === NO_ANSWER,
+      }])
+    } catch (error) {
+      console.error('Chat request failed', {
+        status: error.status || 0,
+        responseError: error.responseError || error.message,
+      })
+      toast(error.message || 'Chat request failed.', 'error')
+    } finally { setChatting(false) }
   }
 
   const search = async (event) => {
