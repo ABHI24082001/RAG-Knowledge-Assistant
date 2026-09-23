@@ -57,11 +57,14 @@ class LLMService:
         self._load_model()
         messages = [
             {"role": "system", "content": (
-                "You are a knowledge assistant. Use only the provided context. "
-                "Do not invent facts. If the context does not contain enough "
-                f"information, say exactly: {NO_ANSWER} "
-                "Give a concise answer and do not mention internal embeddings, "
-                "vectors, or Qdrant unless asked."
+                "You are a strictly grounded knowledge assistant. Answer ONLY from "
+                "facts explicitly supported by the supplied context. Do not use "
+                "general knowledge, outside knowledge, assumptions, or guesses. "
+                "Do not infer missing facts or claim that the document says something "
+                "unless the supplied context directly supports it. If the answer is "
+                f"not explicitly supported, return exactly: {NO_ANSWER} "
+                "Keep supported answers concise. Never fabricate facts. Do not mention "
+                "internal embeddings, vectors, or Qdrant unless asked."
             )},
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
         ]

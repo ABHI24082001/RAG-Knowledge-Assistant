@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 16
     llm_model_name: str = "HuggingFaceTB/SmolLM2-360M-Instruct"
     rag_llm_device: str = "cpu"
+    rag_min_relevance_score: float = Field(default=0.20, ge=-1.0, le=1.0)
     hf_hub_disable_xet: str = "1"
 
     @property

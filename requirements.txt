@@ -1,9 +1,20 @@
 fastapi
 uvicorn[standard]
-gunicorn
 python-multipart
-pydantic-settings
-qdrant-client==1.19.1
+pydantic-settings 
+qdrant-client
+qdrant-client==1.19.1 
 sentence-transformers
 pymupdf
 transformers
+  warnings.warn(
+(.venv) rajsubudhi@Rajs-Mac-mini AI Project % ls
+README.md
+app
+data
+docker-compose.yml
+fronted
+qdrant_storage
+requirements.txt
+tests
+python3 -m venv venv

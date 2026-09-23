@@ -12,6 +12,5 @@ __pycache__/
 
 fronted/node_modules/
 fronted/dist/
-fronted/
 qdrant_storage/
 data/

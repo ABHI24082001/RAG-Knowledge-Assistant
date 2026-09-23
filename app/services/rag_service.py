@@ -1,6 +1,11 @@
+import logging
+
+from app.config import get_settings
 from app.services.embedding_service import embedding_service
 from app.services.llm_service import NO_ANSWER, llm_service
 from app.services.vector_service import VECTOR_SIZE, vector_service
+
+logger = logging.getLogger(__name__)
 
 
 class RAGService:
@@ -22,9 +27,21 @@ class RAGService:
             document_id=document_id,
         )
 
+        threshold = get_settings().rag_min_relevance_score
+        relevant_chunks = [
+            chunk for chunk in retrieved if chunk["score"] >= threshold
+        ]
+        logger.info(
+            "RAG retrieval document_id=%s threshold=%.3f retrieved_scores=%s relevant_scores=%s",
+            document_id or "all",
+            threshold,
+            [round(chunk["score"], 4) for chunk in retrieved],
+            [round(chunk["score"], 4) for chunk in relevant_chunks],
+        )
+
         unique_chunks = []
         seen = set()
-        for chunk in retrieved:
+        for chunk in relevant_chunks:
             identity = (chunk["document_id"], chunk["chunk_id"])
             if identity not in seen:
                 seen.add(identity)
