@@ -1,4 +1,4 @@
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const API_URL = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '')
 const DEFAULT_TIMEOUT_MS = 30_000
 
 export class ApiError extends Error {
